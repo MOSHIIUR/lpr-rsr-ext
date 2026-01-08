@@ -12,8 +12,14 @@ import warnings
 import os
 import tensorflow as tf
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-from tensorflow.keras.models import Model
-from tensorflow.keras.preprocessing.image import img_to_array
+# Use Keras 2 compatibility layer for older saved models
+try:
+    import tf_keras
+    from tf_keras.models import Model
+    from tf_keras.preprocessing.image import img_to_array
+except ImportError:
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.preprocessing.image import img_to_array
 
 from pathlib import Path
 from torch import nn

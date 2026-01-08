@@ -12,7 +12,14 @@ import argparse
 import numpy as np
 
 # Use TensorFlow's Keras for backwards compatibility with older model formats
-from tensorflow.keras.models import model_from_json
+# TensorFlow 2.16+ uses Keras 3 by default, but OCR models are saved with Keras 2
+try:
+    # Try tf_keras (Keras 2 compatibility layer in TensorFlow 2.16+)
+    import tf_keras
+    from tf_keras.models import model_from_json
+except ImportError:
+    # Fall back to tensorflow.keras for older TensorFlow versions
+    from tensorflow.keras.models import model_from_json
 
 def check_format(choices, fname):
 	ext = os.path.splitext(fname)[1]

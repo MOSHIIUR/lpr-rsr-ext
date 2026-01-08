@@ -30,11 +30,11 @@ def __getPaths__(path, sep=';'):
     if os.path.isfile(path) and path.endswith('.txt'):
         try:
             with open(path, '+r')  as f:
-               _training = [line for line in f if re.search('\Atraining', line.split(sep)[1]) != None]
+               _training = [line for line in f if re.search(r'\Atraining', line.split(sep)[1]) != None]
                f.seek(0)
-               _validation = [line for line in f if re.search('\Avalidation', line.split(sep)[1]) != None]
+               _validation = [line for line in f if re.search(r'\Avalidation', line.split(sep)[1]) != None]
                f.seek(0)
-               _testing = [line for line in f if re.search('\Atesting', line.split(sep)[1]) != None]
+               _testing = [line for line in f if re.search(r'\Atesting', line.split(sep)[1]) != None]
                f.seek(0)
                
         except IOError:

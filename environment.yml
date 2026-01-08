@@ -30,6 +30,6 @@ dependencies:
   - pip
   - pip:
     - tensorflow>=2.8.0
-    - keras>=2.8.0
+    - tf-keras>=2.15.0  # Keras 2 compatibility layer for loading old OCR models
     - albumentations>=1.1.0
     - python-Levenshtein>=0.12.0

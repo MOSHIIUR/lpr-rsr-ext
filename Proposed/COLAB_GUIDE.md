@@ -68,14 +68,16 @@ if torch.cuda.is_available():
 
 ```python
 # Cell 3: Install required packages
-!pip install -q tensorflow==2.15.1 keras==2.15.0
+!pip install -q tensorflow==2.15.1
+!pip install -q tf-keras  # Keras 2 compatibility layer for loading old OCR models
 !pip install -q albumentations==1.3.0
 !pip install -q pandas tqdm scikit-learn
 
 # Verify installations
 import tensorflow as tf
+import tf_keras
 print(f"TensorFlow: {tf.__version__}")
-print(f"Keras: {tf.keras.__version__}")
+print(f"tf-keras (Keras 2): {tf_keras.__version__}")
 ```
 
 ### 5. Mount Google Drive
@@ -220,17 +222,20 @@ else:
 ```python
 # Install required packages
 !pip install -q --upgrade pip
-!pip install -q tensorflow==2.15.1 keras==2.15.0
+!pip install -q tensorflow==2.15.1
+!pip install -q tf-keras  # Keras 2 compatibility layer for loading old OCR models
 !pip install -q opencv-python-headless  # headless version for Colab
 !pip install -q albumentations==1.3.0
 !pip install -q pandas tqdm scikit-learn
 
 # Verify
 import tensorflow as tf
+import tf_keras
 import cv2
 import albumentations as A
 print("✓ All packages installed")
 print(f"TensorFlow: {tf.__version__}")
+print(f"tf-keras (Keras 2): {tf_keras.__version__}")
 print(f"OpenCV: {cv2.__version__}")
 ```
 
@@ -663,7 +668,7 @@ if torch.cuda.is_available():
 %cd lpr-rsr-ext/Proposed
 
 # Install dependencies
-!pip install -q tensorflow==2.15.1 keras==2.15.0 albumentations opencv-python-headless
+!pip install -q tensorflow==2.15.1 tf-keras albumentations opencv-python-headless
 
 # Mount Drive
 from google.colab import drive

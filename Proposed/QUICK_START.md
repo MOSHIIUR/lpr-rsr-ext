@@ -22,7 +22,8 @@ conda activate lpr-rsr
 pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
 
 # Install other dependencies
-pip install tensorflow==2.15.1 keras==2.15.0
+pip install tensorflow==2.15.1
+pip install tf-keras  # Keras 2 compatibility for OCR models
 pip install opencv-python albumentations pandas tqdm scikit-learn
 ```
 

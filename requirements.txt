@@ -4,7 +4,7 @@ torchvision>=0.11.0
 
 # TensorFlow and Keras (for pre-trained OCR models)
 tensorflow>=2.8.0
-keras>=2.8.0
+tf-keras>=2.15.0  # Keras 2 compatibility layer for loading old OCR models
 
 # Computer vision
 opencv-python>=4.5.0
