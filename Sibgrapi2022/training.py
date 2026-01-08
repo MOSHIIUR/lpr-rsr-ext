@@ -324,7 +324,7 @@ def main():
     elif args.mode == 1:
         current_epoch, model, train_loss, val_loss, optimizer, early_stopping = load_model(model, args.model, device_ids)
 
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=2, factor = 0.3, min_lr=1e-7, verbose=True)
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=2, factor = 0.3, min_lr=1e-7)
     
     for epoch in range(current_epoch, 50):
         print(f"Epoch {epoch} of 50")
