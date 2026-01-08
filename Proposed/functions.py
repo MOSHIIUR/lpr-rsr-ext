@@ -11,7 +11,8 @@ import json
 import argparse
 import numpy as np
 
-from keras.models import model_from_json
+# Use TensorFlow's Keras for backwards compatibility with older model formats
+from tensorflow.keras.models import model_from_json
 
 def check_format(choices, fname):
 	ext = os.path.splitext(fname)[1]

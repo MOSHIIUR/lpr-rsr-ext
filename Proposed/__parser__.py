@@ -16,7 +16,11 @@ def args_m01():
     ap.add_argument("-b", "--batch", type=int, required=True, help="Batch size")
     ap.add_argument("-m", "--mode", type=int, required=True, choices = [0, 1],  help='Reset Model, Load Model, Evaluate Model. Reset=0, Load=1, Evaluate=2')
     ap.add_argument("--model", type=Path, required=False, help="Path containing the model", default=Path(''))
-    
+    ap.add_argument("--debug", action="store_true", default=False,
+                    help="Enable debug mode: use tiny dataset subset and run 2-3 epochs")
+    ap.add_argument("--debug-samples", type=int, default=20,
+                    help="Number of training samples to use in debug mode (default: 20)")
+
     try:
         args = ap.parse_args()
     except:

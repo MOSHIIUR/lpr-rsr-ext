@@ -9,25 +9,24 @@ import torchvision.transforms as transforms
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.autograd import Variable
 import warnings
-from keras.models import Model
 import os
 import tensorflow as tf
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.image import img_to_array
 
 from pathlib import Path
 from torch import nn
 from network import Network
-from keras.models import Model
 
 from PIL import Image
 from tqdm import tqdm
 from __parser__ import args_m01
 from __syslog__ import EventlogHandler, ExecTime
-from keras.preprocessing.image import img_to_array
 from skimage.metrics import structural_similarity
 from torchvision import datasets, models, transforms
 from math import floor, log10
-from NetSr_v1 import MobileNetV2
+# from NetSr_v1 import MobileNetV2  # Not used, commented out
 # from network import FeatureExtractor
 
 
@@ -244,20 +243,20 @@ class FeatureExtractor(nn.Module):
         return self.feature_extractor(img)
 
 
-def validate_gan (generator, val_dataloader, feature_extractor, L1_loss, MSE_loss):
+def validate_gan (generator, val_dataloader, feature_extractor, L1_loss, MSE_loss, device):
     print('VALIDATION')
     generator.eval()
-    
+
     val_running_loss_G = 0.0
-    
+
     steps = 0
     with torch.no_grad():
         with tqdm(enumerate(val_dataloader), total=len(val_dataloader)) as prog_bar:
-    
-            for i, batch in enumerate(prog_bar):           
+
+            for i, batch in enumerate(prog_bar):
                 _, image = batch
-                imgs_LR = Variable(image['LR']).cuda()
-                imgs_HR = Variable(image['HR']).cuda()
+                imgs_LR = Variable(image['LR']).to(device)
+                imgs_HR = Variable(image['HR']).to(device)
             
                 #  ---------------------
                 #   VALIDATE GENERATOR 
@@ -287,17 +286,17 @@ def validate_gan (generator, val_dataloader, feature_extractor, L1_loss, MSE_los
                 prog_bar.set_postfix(postfix)
             return val_running_loss_G/steps
 
-def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss, MSE_loss):
+def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss, MSE_loss, device):
     print('TRAINING')
-    generator.train()    
+    generator.train()
     train_running_loss_G = 0.0
     steps = 0
-    
+
     with tqdm(enumerate(train_dataloader), total=len(train_dataloader)) as prog_bar:
-        for i, batch in enumerate(prog_bar):           
+        for i, batch in enumerate(prog_bar):
             _, image = batch
-            imgs_LR = Variable(image['LR']).cuda()
-            imgs_HR = Variable(image['HR']).cuda()
+            imgs_LR = Variable(image['LR']).to(device)
+            imgs_HR = Variable(image['HR']).to(device)
             
             #  ---------------------
             #   TRAIN GENERATOR 
@@ -333,29 +332,51 @@ def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss
     
   
 @ExecTime
-def main(): 
+def main():
     args = args_m01()
-    train_dataloader, val_dataloader = __dataset__.load_dataset(args.samples, args.batch, args.mode, pin_memory=True, num_workers=0)
-    path_ocr = Path('./saved_models/2023-02-02-exp-016-br-paper-valfride-cg-ocr-goncalves2018realtime-original-120-60-adam-batch64-pat7')
+
+    # Device detection: use CUDA if available, otherwise CPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"\n🖥️  Using device: {device}")
+    if device.type == 'cpu':
+        print("⚠️  CUDA not available, training on CPU (will be slower)\n")
+
+    # Debug mode indicator
+    if hasattr(args, 'debug') and args.debug:
+        print("\n" + "="*60)
+        print("🔍 DEBUG MODE ENABLED")
+        print(f"   Training samples: {args.debug_samples}")
+        print(f"   Max epochs: 3")
+        print(f"   Early stopping: DISABLED")
+        print("="*60 + "\n")
+
+    train_dataloader, val_dataloader = __dataset__.load_dataset(
+        args.samples, args.batch, args.mode,
+        pin_memory=True, num_workers=0,
+        debug=args.debug if hasattr(args, 'debug') else False,
+        debug_samples=args.debug_samples if hasattr(args, 'debug_samples') else 20
+    )
+    # OCR model for Brazilian license plates (relative to Proposed/ directory)
+    path_ocr = Path('../saved_models/RodoSol-SR')
     
     generator = Network(3, 3)
     feature_extractor = OCRFeatureExtractor(path_ocr)
-    feature_extractor.cuda()
+    feature_extractor.to(device)
+    generator.to(device)
     L1_loss =  nn.L1Loss()
     MSE_loss = nn.MSELoss()
-     
-    
-    
+
+
+
     if args.mode == 0:
         optimizer_G = torch.optim.Adam(generator.parameters(), lr=initial_G_lr, betas=(0.5, 0.555))
-        
+
         train_loss_g = []
-        
+
         val_loss_g = []
-        
+
         early_stopping = EarlyStopping()
-        current_epoch = 0
-        generator.to(device_list[1])    
+        current_epoch = 0    
         
 
     elif args.mode == 1:
@@ -367,31 +388,38 @@ def main():
 #    for _ in range(0, current_epoch):
 #        scheduler_G.step()
 
-    for epoch in range(current_epoch, 200):
-        print(f"Epoch {epoch} of 200:")
+    max_epochs = 3 if (hasattr(args, 'debug') and args.debug) else 200
+    for epoch in range(current_epoch, max_epochs):
+        print(f"Epoch {epoch} of {max_epochs}:")
          
-        train_loss_G = fit_gan(generator,      
-                               train_dataloader, 
-                               optimizer_G, 
+        train_loss_G = fit_gan(generator,
+                               train_dataloader,
+                               optimizer_G,
                                feature_extractor,
                                L1_loss,
-                               MSE_loss)
-        
+                               MSE_loss,
+                               device)
+
         train_loss_g.append(train_loss_G)
 
         val_loss_G = validate_gan(generator,
-                               val_dataloader, 
+                               val_dataloader,
                                feature_extractor,
                                L1_loss,
-                               MSE_loss)
+                               MSE_loss,
+                               device)
         
         val_loss_g.append(val_loss_G)
         
         scheduler_G.step(val_loss_G)
         
         early_stopping(generator, args.save, epoch, optimizer_G, [train_loss_g, val_loss_g])
-        
-        if early_stopping.early_stop:
+
+        # Skip early stopping in debug mode
+        if hasattr(args, 'debug') and args.debug:
+            pass  # Skip early stopping in debug mode
+        elif early_stopping.early_stop:
+            print('Early Stopping')
             break
          
         save_model(generator, args.save, epoch, optimizer_G, [train_loss_g, val_loss_g], 'backup.pt')

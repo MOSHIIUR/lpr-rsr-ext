@@ -19,7 +19,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 def testing(args):
     test_dataloader = __dataset__.load_dataset(args.samples, args.batch, 2, pin_memory=True, num_workers=1)
     count = 0
-    path_ocr = Path('./saved_models/2023-02-02-exp-016-br-paper-valfride-cg-ocr-goncalves2018realtime-original-120-60-adam-batch64-pat7')
+    # OCR model for Brazilian license plates (relative to Proposed/ directory)
+    path_ocr = Path('../saved_models/RodoSol-SR')
     criterion = SSIMLoss(path_ocr)
        
     # device_ids = GPU_devices([0, 1])

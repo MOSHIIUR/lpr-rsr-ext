@@ -19,8 +19,11 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from skimage.metrics import structural_similarity
 
-IMG_LR = (40, 20)
-IMG_HR = (160, 80)
+# Configuration for ICPR Brazilian dataset
+# Original images: 60x32 (HR), 31x17 (LR)
+# Using 4x upscaling with aspect ratio 2.0
+IMG_LR = (32, 16)
+IMG_HR = (128, 64)
 
 
 def __getPaths__(path, sep=';'):
@@ -310,12 +313,21 @@ class customDataset(Dataset):
                 }
 
 @EventlogHandler
-def load_dataset(path, batch_size, mode, pin_memory, num_workers):
+def load_dataset(path, batch_size, mode, pin_memory, num_workers, debug=False, debug_samples=20):
     if mode == 0 or mode == 1:
-        train_dataloader = DataLoader(customDataset(train_test_split(path)[0], augmentation=True), batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
-        val_dataloader = DataLoader(customDataset(train_test_split(path)[2], augmentation=True), batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
+        train_data = train_test_split(path)[0]
+        val_data = train_test_split(path)[2]
+
+        # Debug mode: use only a tiny subset
+        if debug:
+            train_data = train_data[:debug_samples]
+            val_data = val_data[:max(5, debug_samples//4)]
+            print(f"\n🔍 DEBUG MODE: Using {len(train_data)} training samples, {len(val_data)} validation samples\n")
+
+        train_dataloader = DataLoader(customDataset(train_data, augmentation=True), batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
+        val_dataloader = DataLoader(customDataset(val_data, augmentation=True), batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
         return train_dataloader, val_dataloader
-            
+
     elif mode == 2:
         test_dataloader = DataLoader(customDataset(train_test_split(path)[1], augmentation=False), batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
         return test_dataloader

@@ -1,0 +1,57 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Model checkpoints and weights (too large for git)
+*.pt
+*.pth
+*.h5
+*.hdf5
+checkpoints/
+debug_checkpoints/
+saved_models/
+*.weights
+
+# Dataset files (too large for git)
+dataset/
+*.txt.bak
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# Test output images
+TEST_*.jpg
+TEST_*.png
+results/
+output/
+
+# Environment files (may contain sensitive info)
+.env
+.env.local
+
+# OS files
+Thumbs.db
+.DS_Store
