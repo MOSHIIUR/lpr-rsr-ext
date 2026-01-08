@@ -141,9 +141,9 @@ class SSIMLoss(nn.Module):
         img = cv2.resize(img, (self.IMAGE_DIMS[1], self.IMAGE_DIMS[0]))        
         img = img_to_array(img)        
         img = img.reshape(1, self.IMAGE_DIMS[0], self.IMAGE_DIMS[1], self.IMAGE_DIMS[2])
-        
+
         img = (img/255.0).astype('float')
-        predictions = self.OCR.predict(img)
+        predictions = self.OCR.predict(img, verbose=0)
 
         plates = [''] * 1
         for task_idx, pp in enumerate(predictions):
@@ -220,8 +220,8 @@ class OCRFeatureExtractor(nn.Module):
         img = img.reshape(1, self.IMAGE_DIMS[0], self.IMAGE_DIMS[1], self.IMAGE_DIMS[2])
         
         img = (img/255.0).astype('float')
-        predictions = self.OCR.predict(img)
-                
+        predictions = self.OCR.predict(img, verbose=0)
+
         return predictions
 
     def forward(self, images):
