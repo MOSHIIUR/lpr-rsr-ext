@@ -30,6 +30,7 @@ from tqdm import tqdm
 from __parser__ import args_m01
 from __syslog__ import EventlogHandler, ExecTime
 from skimage.metrics import structural_similarity
+from wandb_logger import get_wandb_logger
 from torchvision import datasets, models, transforms
 from math import floor, log10
 # from NetSr_v1 import MobileNetV2  # Not used, commented out
@@ -249,11 +250,13 @@ class FeatureExtractor(nn.Module):
         return self.feature_extractor(img)
 
 
-def validate_gan (generator, val_dataloader, feature_extractor, L1_loss, MSE_loss, device):
+def validate_gan (generator, val_dataloader, feature_extractor, L1_loss, MSE_loss, device, wandb_logger=None, epoch=0):
     print('VALIDATION')
     generator.eval()
 
     val_running_loss_G = 0.0
+    val_running_mse = 0.0
+    val_running_features = 0.0
 
     steps = 0
     with torch.no_grad():
@@ -279,9 +282,20 @@ def validate_gan (generator, val_dataloader, feature_extractor, L1_loss, MSE_los
                 loss = mse_loss + features
             
                 val_running_loss_G+=loss.detach().item()
+                val_running_mse += mse_loss.detach().item()
+                val_running_features += features.detach().item()
                 Image.fromarray(np.array(feature_extractor.to_numpy(fake_output[0].to('cpu'))).astype('uint8')).save('TEST_08.jpg')
-            
+
                 steps+=1
+
+                # Log batch metrics to wandb
+                if wandb_logger and wandb_logger.enabled:
+                    wandb_logger.log_metrics({
+                        'val/batch_loss_total': loss.detach().item(),
+                        'val/batch_mse_loss': mse_loss.detach().item(),
+                        'val/batch_features_loss': features.detach().item(),
+                        'val/running_loss': val_running_loss_G / steps,
+                    })
                 postfix={
                     'Running_loss': (val_running_loss_G)/steps,
                     'Current_loss': loss.detach().item(),
@@ -290,12 +304,19 @@ def validate_gan (generator, val_dataloader, feature_extractor, L1_loss, MSE_los
                     }
             
                 prog_bar.set_postfix(postfix)
-            return val_running_loss_G/steps
 
-def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss, MSE_loss, device):
+            return {
+                'total_loss': val_running_loss_G / steps,
+                'mse_loss': val_running_mse / steps,
+                'features_loss': val_running_features / steps
+            }
+
+def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss, MSE_loss, device, wandb_logger=None, epoch=0):
     print('TRAINING')
     generator.train()
     train_running_loss_G = 0.0
+    train_running_mse = 0.0
+    train_running_features = 0.0
     steps = 0
 
     with tqdm(enumerate(train_dataloader), total=len(train_dataloader)) as prog_bar:
@@ -323,9 +344,20 @@ def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss
             optimizer_G.step()
             
             train_running_loss_G+=loss.detach().item()
+            train_running_mse += mse_loss.detach().item()
+            train_running_features += features.detach().item()
             Image.fromarray(np.array(feature_extractor.to_numpy(fake_output[0].to('cpu'))).astype('uint8')).save('TEST_08.jpg')
-            
+
             steps+=1
+
+            # Log batch metrics to wandb
+            if wandb_logger and wandb_logger.enabled:
+                wandb_logger.log_metrics({
+                    'train/batch_loss_total': loss.detach().item(),
+                    'train/batch_mse_loss': mse_loss.detach().item(),
+                    'train/batch_features_loss': features.detach().item(),
+                    'train/running_loss': train_running_loss_G / steps,
+                })
             postfix={
                 'Running_loss': (train_running_loss_G)/steps,
                 'Current_loss': loss.detach().item(),
@@ -334,12 +366,20 @@ def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss
                 }
             
             prog_bar.set_postfix(postfix)
-        return train_running_loss_G/steps
+
+        return {
+            'total_loss': train_running_loss_G / steps,
+            'mse_loss': train_running_mse / steps,
+            'features_loss': train_running_features / steps
+        }
     
   
 @ExecTime
 def main():
     args = args_m01()
+
+    # Initialize Weights & Biases logger
+    wandb_logger = get_wandb_logger(args, mode='train')
 
     # Device detection: use CUDA if available, otherwise CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -390,31 +430,44 @@ def main():
     
     #scheduler_G = torch.optim.lr_scheduler.LambdaLR(optimizer_G, lr_lambda=LambdaLR(200, 2, 2).step, verbose=True, last_epoch=-1)
     scheduler_G = lr_scheduler.ReduceLROnPlateau(optimizer_G, factor=0.8, patience=2)
- 
+
 #    for _ in range(0, current_epoch):
 #        scheduler_G.step()
+
+    # Log dataset info to wandb
+    if wandb_logger.enabled:
+        wandb_logger.log_metrics({
+            'dataset/train_size': len(train_dataloader.dataset),
+            'dataset/val_size': len(val_dataloader.dataset),
+        }, step=0)
 
     max_epochs = 3 if (hasattr(args, 'debug') and args.debug) else 200
     for epoch in range(current_epoch, max_epochs):
         print(f"Epoch {epoch} of {max_epochs}:")
-         
-        train_loss_G = fit_gan(generator,
+
+        train_metrics = fit_gan(generator,
                                train_dataloader,
                                optimizer_G,
                                feature_extractor,
                                L1_loss,
                                MSE_loss,
-                               device)
+                               device,
+                               wandb_logger=wandb_logger,
+                               epoch=epoch)
 
+        train_loss_G = train_metrics['total_loss']
         train_loss_g.append(train_loss_G)
 
-        val_loss_G = validate_gan(generator,
+        val_metrics = validate_gan(generator,
                                val_dataloader,
                                feature_extractor,
                                L1_loss,
                                MSE_loss,
-                               device)
-        
+                               device,
+                               wandb_logger=wandb_logger,
+                               epoch=epoch)
+
+        val_loss_G = val_metrics['total_loss']
         val_loss_g.append(val_loss_G)
         
         scheduler_G.step(val_loss_G)
@@ -432,8 +485,32 @@ def main():
         print('G validation Loss: ', val_loss_G)
         print('G Training Loss: ', train_loss_G)
 
-        
-        
+        # Log sample SR images periodically
+        log_interval = args.wandb_log_interval if hasattr(args, 'wandb_log_interval') else 5
+        if wandb_logger.enabled and (epoch % log_interval == 0 or epoch == 0):
+            try:
+                sample_batch = next(iter(val_dataloader))
+                with torch.no_grad():
+                    sample_lr = sample_batch[1]['LR'][:4].to(device)  # First 4 images
+                    sample_hr = sample_batch[1]['HR'][:4].to(device)
+                    sample_sr = generator(sample_lr)
+
+                from torchvision.transforms import ToPILImage
+                to_pil = ToPILImage()
+
+                for idx in range(min(4, sample_lr.size(0))):
+                    images = {
+                        f'sample_{idx}/LR': to_pil(sample_lr[idx].cpu()),
+                        f'sample_{idx}/HR': to_pil(sample_hr[idx].cpu()),
+                        f'sample_{idx}/SR': to_pil(sample_sr[idx].cpu()),
+                    }
+                    wandb_logger.log_images(images, step=epoch)
+            except Exception as e:
+                print(f"⚠️  Could not log sample images: {e}")
+
+    # Finish wandb run
+    wandb_logger.finish()
+
     return 0
 
 if __name__ == "__main__":

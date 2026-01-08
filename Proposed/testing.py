@@ -11,20 +11,35 @@ from tqdm import tqdm
 from pathlib import Path
 from network import Network
 from __parser__ import args_m2
+import training
 from training import load_model, SSIMLoss
+from wandb_logger import get_wandb_logger
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-def testing(args):
+def testing(args, wandb_logger=None):
     test_dataloader = __dataset__.load_dataset(args.samples, args.batch, 2, pin_memory=True, num_workers=1)
     count = 0
     # OCR model for Brazilian license plates (relative to Proposed/ directory)
     path_ocr = Path('../saved_models/RodoSol-SR')
     criterion = SSIMLoss(path_ocr)
-       
+
+    # Initialize wandb logger if not provided
+    if wandb_logger is None:
+        wandb_logger = get_wandb_logger(args, mode='test')
+
+    # Device detection
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"\n🖥️  Using device: {device}")
+    if device.type == 'cpu':
+        print("⚠️  CUDA not available, testing on CPU (will be slower)\n")
+
+    # Set device_list in training module for load_model function
+    training.device_list = [device, device]
+
     # device_ids = GPU_devices([0, 1])
-    model = Network(3, 3).cuda()
+    model = Network(3, 3).to(device)
     # current_epoch, model, train_loss, val_loss, optimizer, early_stopping = load_model(model, args.model, device_ids)
     _, model, optimizer_G, train_loss_g, val_loss_g, _ = load_model(model, args.model)
     
@@ -35,7 +50,8 @@ def testing(args):
     imgs=0
     SSIM_param = {
         'gaussian_weights':True,
-        'multichannel':True,
+        'channel_axis':2,  # Updated from deprecated 'multichannel'
+        'win_size':3,  # Smaller window size for small images (min is 3)
         'sigma':1.5,
         'use_sample_covariance':False,
         'data_range':1.0
@@ -45,7 +61,7 @@ def testing(args):
         prog_bar = tqdm(enumerate(test_dataloader), total=len(test_dataloader))
         
         for i, batch in prog_bar:
-            batch['SR'] = model(batch['LR'].cuda())
+            batch['SR'] = model(batch['LR'].to(device))
          
             for item in range(len(batch['HR'])):
                 imgLR = np.array(criterion.to_numpy(batch['LR'][item].cpu())).astype('uint8')
@@ -118,6 +134,48 @@ def testing(args):
             df.to_csv(fp, index=False, line_terminator='\n')
             fp.write('Total images ' + str(count)+'\n')
 
+        # Log test results to wandb
+        if wandb_logger.enabled:
+            # Aggregate metrics (exclude 'Average' row for mean calculation)
+            df_no_avg = df.iloc[:-1]  # Exclude last row which is 'Average'
+            avg_metrics = {
+                'test/psnr_mean': df_no_avg['PSNR HR/SR'].mean(),
+                'test/ssim_mean': df_no_avg['SSIM HR/SR'].mean(),
+                'test/accuracy_hr_mean': df_no_avg['Accuracy (HR)'].mean(),
+                'test/accuracy_lr_mean': df_no_avg['Accuracy (LR)'].mean(),
+                'test/accuracy_sr_mean': df_no_avg['Accuracy (SR)'].mean(),
+                'test/total_images': count,
+            }
+            wandb_logger.log_metrics(avg_metrics)
+
+            # Accuracy distributions
+            acc_dist_metrics = {}
+            for i in range(8):
+                if i in HR.index:
+                    acc_dist_metrics[f'test/accuracy_hr_dist_{i}'] = HR[i]
+                if i in LR.index:
+                    acc_dist_metrics[f'test/accuracy_lr_dist_{i}'] = LR[i]
+                if i in SR.index:
+                    acc_dist_metrics[f'test/accuracy_sr_dist_{i}'] = SR[i]
+            wandb_logger.log_metrics(acc_dist_metrics)
+
+            # Detailed results table (first 100 rows)
+            table_data = []
+            for idx in range(min(100, len(df_no_avg))):
+                row = df_no_avg.iloc[idx]
+                table_data.append([
+                    row['file'], row['GT Plate'], row['HR Prediction'],
+                    row['Accuracy (HR)'], row['LR Prediction'], row['Accuracy (LR)'],
+                    row['OCR SR Prediction'], row['Accuracy (SR)'],
+                    row['PSNR HR/SR'], row['SSIM HR/SR']
+                ])
+
+            wandb_logger.log_table('test/detailed_results', table_data,
+                columns=['File', 'GT Plate', 'HR Pred', 'HR Acc',
+                        'LR Pred', 'LR Acc', 'SR Pred', 'SR Acc', 'PSNR', 'SSIM'])
+
+            print("✅ Test results logged to W&B")
+
 
 def histogram(save_path, df, name, columns_to_drop=['PSNR HR/SR', 'SSIM HR/SR']):
     hist_df = df.select_dtypes(exclude=['object'])
@@ -157,4 +215,6 @@ if __name__ == "__main__":
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         args = args_m2()
-        testing(args)
+        wandb_logger = get_wandb_logger(args, mode='test')
+        testing(args, wandb_logger)
+        wandb_logger.finish()

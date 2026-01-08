@@ -21,6 +21,18 @@ def args_m01():
     ap.add_argument("--debug-samples", type=int, default=20,
                     help="Number of training samples to use in debug mode (default: 20)")
 
+    # Weights & Biases arguments
+    ap.add_argument("--wandb-project", type=str, default="lpr-super-resolution",
+                    help="Weights & Biases project name")
+    ap.add_argument("--wandb-run-name", type=str, default=None,
+                    help="Custom run name for W&B (auto-generated if not provided)")
+    ap.add_argument("--wandb-entity", type=str, default=None,
+                    help="W&B entity/team name (optional)")
+    ap.add_argument("--wandb-log-interval", type=int, default=5,
+                    help="Log sample images every N epochs (default: 5)")
+    ap.add_argument("--disable-wandb", action="store_true", default=False,
+                    help="Disable Weights & Biases logging")
+
     try:
         args = ap.parse_args()
     except:
@@ -56,7 +68,15 @@ def args_m2():
     ap.add_argument("-s", "--save", type=Path, required=True, help="Backup and saving path")
     ap.add_argument("-b", "--batch", type=int, required=True, help="Batch size")
     ap.add_argument("--model", type=Path, required=True, help="Path containing the model", default=Path(''))
-    
+
+    # W&B arguments for testing
+    ap.add_argument("--wandb-run-id", type=str, default=None,
+                    help="W&B run ID to resume (from training)")
+    ap.add_argument("--wandb-project", type=str, default="lpr-super-resolution",
+                    help="Weights & Biases project name")
+    ap.add_argument("--disable-wandb", action="store_true", default=False,
+                    help="Disable Weights & Biases logging")
+
     try:
         args = ap.parse_args()
     except:
