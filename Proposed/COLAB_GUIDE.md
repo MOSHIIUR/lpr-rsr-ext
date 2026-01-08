@@ -89,9 +89,9 @@ drive.mount('/content/drive')
 !mkdir -p /content/drive/MyDrive/lpr_checkpoints
 ```
 
-### 6. Upload Dataset or Use Drive
+### 6. Prepare Dataset
 
-**Option A: Upload Dataset File (Small)**
+**Option A: Use Pre-prepared dataset.txt**
 ```python
 # Cell 5a: Upload dataset.txt
 from google.colab import files
@@ -100,12 +100,28 @@ uploaded = files.upload()  # Upload your dataset.txt
 !mv dataset.txt ../dataset/
 ```
 
-**Option B: Use Dataset from Drive (Recommended)**
+**Option B: Link Dataset from Drive (Recommended)**
 ```python
 # Cell 5b: Link dataset from Google Drive
 # First, upload your dataset to Drive: MyDrive/lpr_dataset/
 !ln -s /content/drive/MyDrive/lpr_dataset /content/lpr-rsr-ext/dataset
 !ls ../dataset/  # Verify
+```
+
+**Option C: Prepare Dataset from ICPR Format**
+```python
+# Cell 5c: Prepare dataset using prepare_dataset.py
+# First, upload raw dataset to Drive: MyDrive/raw_dataset/Brazilian/
+!python ../prepare_dataset.py \
+    --dataset-root /content/drive/MyDrive/raw_dataset/Brazilian \
+    --output-dir ../dataset \
+    --train-ratio 0.7 \
+    --val-ratio 0.15 \
+    --test-ratio 0.15
+
+# Verify
+!ls ../dataset/
+!head -5 ../dataset/dataset.txt
 ```
 
 ### 7. Upload OCR Models

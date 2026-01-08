@@ -37,12 +37,20 @@ Your dataset should be a text file with semicolon-separated paths:
 /path/to/high_res_image4.jpg;/path/to/low_res_image4.jpg;test
 ```
 
-If you have ICPR Brazilian plates, use the provided script:
+If you have ICPR format dataset (with track_* folders), use the provided script:
 
 ```bash
 cd ..
-python prepare_dataset.py
-# Creates: dataset/dataset.txt with 25,000 images
+python prepare_dataset.py \
+    --dataset-root /path/to/your/raw/dataset \
+    --output-dir ./dataset
+
+# Example: For ICPR Brazilian plates
+python prepare_dataset.py \
+    --dataset-root /path/to/ICPR/train/Scenario-A/Brazilian \
+    --output-dir ./dataset
+
+# Creates: dataset/dataset.txt with train/val/test split (70/15/15 by default)
 ```
 
 ## 3. Download OCR Models (1 minute)

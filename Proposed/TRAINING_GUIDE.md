@@ -67,17 +67,39 @@ The dataset should be a `.txt` file with semicolon-separated values:
 
 ### Automated Dataset Preparation
 
-Use the provided script for ICPR Brazilian plates:
+Use the provided script for ICPR format datasets (with track_* folders):
 
 ```bash
-python prepare_dataset.py
+python prepare_dataset.py \
+    --dataset-root /path/to/your/raw/dataset \
+    --output-dir ./dataset \
+    --train-ratio 0.7 \
+    --val-ratio 0.15 \
+    --test-ratio 0.15
 ```
 
-This will:
-1. Scan for all plate images in the dataset directory
-2. Create HR and LR versions
-3. Split into train/val/test (70/15/15)
-4. Generate `dataset/dataset.txt`
+**Example: ICPR Brazilian plates**
+```bash
+python prepare_dataset.py \
+    --dataset-root /data/ICPR/train/Scenario-A/Brazilian \
+    --output-dir ./dataset
+```
+
+**Available arguments:**
+- `--dataset-root` (required): Path to raw dataset containing track_* folders
+- `--output-dir`: Where to save dataset.txt (default: ./dataset)
+- `--train-ratio`: Training set ratio (default: 0.7)
+- `--val-ratio`: Validation set ratio (default: 0.15)
+- `--test-ratio`: Test set ratio (default: 0.15)
+- `--seed`: Random seed for reproducibility (default: 42)
+
+**What the script does:**
+1. Scans for all track_* folders in dataset-root
+2. Reads annotations.json from each track
+3. Pairs HR and LR images (hr-001.png with lr-001.png)
+4. Creates metadata .txt files for each HR image
+5. Splits into train/val/test sets
+6. Generates dataset.txt with all image paths
 
 ---
 
