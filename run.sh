@@ -92,6 +92,9 @@ mkdir -p checkpoints
 
 echo "🚀 Starting training..."
 
+# Force unbuffered Python output for real-time logging
+export PYTHONUNBUFFERED=1
+
 # Run training with W&B enabled
 # Mode 0: Train from scratch
 # Mode 1: Resume from checkpoint
