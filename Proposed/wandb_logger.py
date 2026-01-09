@@ -42,8 +42,7 @@ class WandbLogger:
         self.mode = mode
         self.step_counter = 0
 
-        # Check if wandb should be enabled
-        if hasattr(args, 'disable_wandb') and args.disable_wandb:
+        if getattr(args, 'disable_wandb', False):
             print("W&B logging disabled via --disable-wandb flag")
             return
 
@@ -64,31 +63,30 @@ class WandbLogger:
 
     def _init_training_run(self, args):
         """Initialize wandb for training"""
-        # Prepare wandb config
+        debug_mode = getattr(args, 'debug', False)
+
         config = {
             'batch_size': args.batch,
-            'learning_rate': 0.0001,  # initial_G_lr from training.py
+            'learning_rate': 0.0001,
             'optimizer': 'Adam',
             'scheduler': 'ReduceLROnPlateau',
             'scheduler_factor': 0.8,
             'scheduler_patience': 2,
             'early_stopping_patience': 20,
-            'max_epochs': 3 if (hasattr(args, 'debug') and args.debug) else 200,
+            'max_epochs': 3 if debug_mode else 200,
             'loss_function': 'MSE + OCR_Features',
             'dataset_path': args.samples.as_posix(),
             'model_architecture': 'RDN + TFAM + AutoEncoder',
-            'debug_mode': hasattr(args, 'debug') and args.debug,
+            'debug_mode': debug_mode,
         }
 
-        # Add optional debug parameters
-        if hasattr(args, 'debug') and args.debug:
-            config['debug_samples'] = args.debug_samples if hasattr(args, 'debug_samples') else None
+        if debug_mode:
+            config['debug_samples'] = getattr(args, 'debug_samples', None)
 
-        # Initialize wandb
         self.run = wandb.init(
-            project=args.wandb_project if hasattr(args, 'wandb_project') else 'lpr-super-resolution',
-            name=args.wandb_run_name if hasattr(args, 'wandb_run_name') else None,
-            entity=args.wandb_entity if hasattr(args, 'wandb_entity') else None,
+            project=getattr(args, 'wandb_project', 'lpr-super-resolution'),
+            name=getattr(args, 'wandb_run_name', None),
+            entity=getattr(args, 'wandb_entity', None),
             config=config,
             resume='allow',
         )
@@ -104,27 +102,19 @@ class WandbLogger:
 
     def _init_testing_run(self, args):
         """Initialize or resume wandb for testing"""
-        run_id = None
+        run_id = getattr(args, 'wandb_run_id', None)
 
-        # Try to get run_id from CLI argument
-        if hasattr(args, 'wandb_run_id') and args.wandb_run_id:
-            run_id = args.wandb_run_id
-        else:
-            # Try to load from checkpoint directory
-            checkpoint_dir = args.model.parent
-            run_id_file = checkpoint_dir / 'wandb_run_id.txt'
+        # Try to load from checkpoint directory if not provided
+        if not run_id:
+            run_id_file = args.model.parent / 'wandb_run_id.txt'
             if run_id_file.exists():
-                with open(run_id_file, 'r') as f:
-                    run_id = f.read().strip()
+                run_id = run_id_file.read_text().strip()
                 print(f"📂 Found W&B run ID in {run_id_file}: {run_id}")
 
+        project = getattr(args, 'wandb_project', 'lpr-super-resolution')
+
         if run_id:
-            # Resume existing run
-            self.run = wandb.init(
-                project=args.wandb_project if hasattr(args, 'wandb_project') else 'lpr-super-resolution',
-                id=run_id,
-                resume='allow',
-            )
+            self.run = wandb.init(project=project, id=run_id, resume='allow')
             print(f"✅ W&B resumed: {self.run.url}")
         else:
             print("⚠️  No W&B run ID found. Starting new run for testing.")
@@ -133,10 +123,7 @@ class WandbLogger:
                 'batch_size': args.batch,
                 'model_path': args.model.as_posix(),
             }
-            self.run = wandb.init(
-                project=args.wandb_project if hasattr(args, 'wandb_project') else 'lpr-super-resolution',
-                config=config,
-            )
+            self.run = wandb.init(project=project, config=config)
             print(f"✅ W&B initialized: {self.run.url}")
 
     def log_metrics(self, metrics: Dict[str, Any], step: Optional[int] = None):

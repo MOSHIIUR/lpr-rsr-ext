@@ -388,10 +388,13 @@ def main():
         print("⚠️  CUDA not available, training on CPU (will be slower)\n")
 
     # Debug mode indicator
-    if hasattr(args, 'debug') and args.debug:
+    debug_mode = getattr(args, 'debug', False)
+    debug_samples = getattr(args, 'debug_samples', 20)
+
+    if debug_mode:
         print("\n" + "="*60)
         print("🔍 DEBUG MODE ENABLED")
-        print(f"   Training samples: {args.debug_samples}")
+        print(f"   Training samples: {debug_samples}")
         print(f"   Max epochs: 3")
         print(f"   Early stopping: DISABLED")
         print("="*60 + "\n")
@@ -399,8 +402,8 @@ def main():
     train_dataloader, val_dataloader = __dataset__.load_dataset(
         args.samples, args.batch, args.mode,
         pin_memory=True, num_workers=0,
-        debug=args.debug if hasattr(args, 'debug') else False,
-        debug_samples=args.debug_samples if hasattr(args, 'debug_samples') else 20
+        debug=debug_mode,
+        debug_samples=debug_samples
     )
     # OCR model for Brazilian license plates (relative to Proposed/ directory)
     path_ocr = Path('../saved_models/RodoSol-SR')
@@ -441,7 +444,7 @@ def main():
             'dataset/val_size': len(val_dataloader.dataset),
         }, step=0)
 
-    max_epochs = 3 if (hasattr(args, 'debug') and args.debug) else 200
+    max_epochs = 3 if debug_mode else 200
     for epoch in range(current_epoch, max_epochs):
         print(f"Epoch {epoch} of {max_epochs}:")
 
@@ -475,9 +478,7 @@ def main():
         early_stopping(generator, args.save, epoch, optimizer_G, [train_loss_g, val_loss_g])
 
         # Skip early stopping in debug mode
-        if hasattr(args, 'debug') and args.debug:
-            pass  # Skip early stopping in debug mode
-        elif early_stopping.early_stop:
+        if not debug_mode and early_stopping.early_stop:
             print('Early Stopping')
             break
          
@@ -486,7 +487,7 @@ def main():
         print('G Training Loss: ', train_loss_G)
 
         # Log sample SR images periodically
-        log_interval = args.wandb_log_interval if hasattr(args, 'wandb_log_interval') else 5
+        log_interval = getattr(args, 'wandb_log_interval', 5)
         if wandb_logger.enabled and (epoch % log_interval == 0 or epoch == 0):
             try:
                 sample_batch = next(iter(val_dataloader))
