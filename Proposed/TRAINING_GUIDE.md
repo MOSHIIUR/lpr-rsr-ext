@@ -257,6 +257,72 @@ This happens after 10 epochs without improvement (configurable).
 
 ---
 
+## Weights & Biases Integration
+
+Track training metrics, sample images, and test results with [Weights & Biases](https://wandb.ai):
+
+### Setup
+
+```bash
+# Install wandb (optional)
+pip install wandb
+wandb login  # First time only
+```
+
+### Training with W&B
+
+```bash
+python training.py \
+    -t ../dataset/dataset.txt \
+    -s ./checkpoints \
+    -b 8 -m 0 \
+    --wandb-project my-lpr-project \
+    --wandb-run-name experiment-001 \
+    --wandb-log-interval 5
+```
+
+### Testing with W&B
+
+Testing automatically resumes the training run if a run ID was saved:
+
+```bash
+python testing.py \
+    -t ../dataset/dataset.txt \
+    -s ./results \
+    -b 4 \
+    --model ./checkpoints/backup.pt
+```
+
+### Disable W&B
+
+```bash
+python training.py -t ../dataset/dataset.txt -s ./checkpoints -b 8 -m 0 --disable-wandb
+```
+
+### Tracked Metrics
+
+| Phase | Metrics |
+|-------|---------|
+| Training | Batch losses (total, MSE, features), running averages |
+| Validation | Batch losses and running averages per epoch |
+| Sample Images | LR/HR/SR comparison every N epochs |
+| Testing | PSNR, SSIM, OCR accuracy distributions, detailed results table |
+
+### W&B Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--wandb-project` | Project name | `lpr-super-resolution` |
+| `--wandb-run-name` | Custom run name | Auto-generated |
+| `--wandb-entity` | Team/organization name | None |
+| `--wandb-log-interval` | Image logging frequency (epochs) | 5 |
+| `--disable-wandb` | Disable W&B logging | False |
+| `--wandb-run-id` | Resume specific run (testing only) | None |
+
+**Note:** W&B is completely optional. Training and testing work normally without it installed or when disabled with `--disable-wandb`.
+
+---
+
 ## Checkpointing
 
 ### Checkpoint Contents

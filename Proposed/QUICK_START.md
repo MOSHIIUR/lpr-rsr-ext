@@ -119,6 +119,23 @@ python training.py \
 - Save best model to `checkpoints/backup.pt`
 - Display progress bars with loss metrics
 
+### Optional: Enable W&B Tracking
+
+Track experiments with [Weights & Biases](https://wandb.ai):
+
+```bash
+pip install wandb
+wandb login
+
+python training.py \
+    -t ../dataset/dataset.txt \
+    -s ./checkpoints \
+    -b 8 -m 0 \
+    --wandb-project my-lpr-project
+```
+
+See `TRAINING_GUIDE.md` for full W&B options.
+
 ## 6. Test Your Model
 
 After training, test on validation/test images:
@@ -167,6 +184,8 @@ RuntimeError: CUDA out of memory
 - `--model`: Path to checkpoint for resuming (required if mode=1)
 - `--debug`: Enable debug mode with tiny dataset
 - `--debug-samples`: Number of samples in debug mode (default: 20)
+- `--wandb-project`: W&B project name (optional)
+- `--disable-wandb`: Disable W&B logging
 
 ### Testing Arguments
 - `-t, --samples`: Path to dataset.txt file (required)
