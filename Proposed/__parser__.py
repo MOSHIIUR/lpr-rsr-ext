@@ -53,16 +53,16 @@ def args_m01():
     
     if args.mode == 0:
         if not args.save.is_dir():
-            print('Creating save directory: {}'.format(args.save))
+            print(f'Creating save directory: {args.save}')
             args.save.mkdir(parents=True, exist_ok=True)
-        args.model=None
+        args.model = None
     
     elif args.mode == 1:
         if not(args.model.is_file() and args.model.suffix == '.pt'):
             raise argparse.ArgumentTypeError("for \'--m;--mode\' set to 1 \'--model;--path_model\' must be a valid file.")
             
             
-        if not os.path.exists(args.save):
+        if not args.save.exists():
             raise argparse.ArgumentTypeError("the \'--save;--save_model\' is necessary.")
             
     return args
@@ -87,7 +87,7 @@ def args_m2():
         raise Exception("Missing Arguments")
         
     if not args.save.is_dir():
-        print('Creating evaluation directory: {}'.format(args.save))
+        print(f'Creating evaluation directory: {args.save}')
         args.save.mkdir(parents=True, exist_ok=True)
     
     if not(args.model.is_file() and args.model.suffix == '.pt'):

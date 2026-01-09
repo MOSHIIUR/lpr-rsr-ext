@@ -5,7 +5,6 @@ Weights & Biases logging wrapper for LPR Super-Resolution
 Provides optional W&B integration with graceful fallback
 """
 
-import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import torch
@@ -96,8 +95,7 @@ class WandbLogger:
 
         # Save run ID to file for testing phase
         run_id_file = Path(args.save) / 'wandb_run_id.txt'
-        with open(run_id_file, 'w') as f:
-            f.write(self.run.id)
+        run_id_file.write_text(self.run.id)
         print(f"   Run ID saved to {run_id_file}")
 
     def _init_testing_run(self, args):
@@ -159,22 +157,15 @@ class WandbLogger:
         for key, img in images.items():
             if isinstance(img, wandb.Image):
                 wandb_images[key] = img
-            elif isinstance(img, Image.Image):
-                wandb_images[key] = wandb.Image(img)
-            elif isinstance(img, np.ndarray):
+            elif isinstance(img, (Image.Image, np.ndarray)):
                 wandb_images[key] = wandb.Image(img)
             elif isinstance(img, torch.Tensor):
-                # Convert tensor to numpy
                 img_np = img.detach().cpu().numpy()
-                # If in CHW format, convert to HWC
                 if img_np.ndim == 3 and img_np.shape[0] == 3:
                     img_np = np.transpose(img_np, (1, 2, 0))
                 wandb_images[key] = wandb.Image(img_np)
 
-        if step is not None:
-            wandb.log(wandb_images, step=step)
-        else:
-            wandb.log(wandb_images)
+        wandb.log(wandb_images, step=step)
 
     def log_table(self, table_name: str, data: List[List], columns: List[str]):
         """
