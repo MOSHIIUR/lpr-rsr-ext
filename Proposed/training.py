@@ -90,17 +90,30 @@ class EarlyStopping():
         self.counter = 0
         self.best_loss = best_loss
         self.early_stop = False
-        
-    def __call__(self, model_G, save, epoch, optimizer_G, loss_history):
+
+    def __call__(self, model_G, save, epoch, optimizer_G, loss_history,
+                 test_dataloader=None, device=None, wandb_logger=None):
         if self.best_loss == None:
             self.best_loss = loss_history[1][-1]
-            
+
         elif self.best_loss - loss_history[1][-1] > self.min_delta:
             self.best_loss = loss_history[1][-1]
             self.counter = 0
-            
+
             save_model(model_G, save, epoch, optimizer_G, loss_history, 'bestmodel.pt')
-            
+
+            # Run test evaluation on new best model
+            if test_dataloader is not None and device is not None:
+                from testing import run_test_evaluation
+                print('\n--- Running Test Evaluation (New Best Model) ---')
+                test_metrics = run_test_evaluation(
+                    model_G, test_dataloader, device, wandb_logger, epoch
+                )
+                print(f"  Test PSNR: {test_metrics['psnr_mean']:.2f}, "
+                      f"SSIM: {test_metrics['ssim_mean']:.4f}, "
+                      f"SR Accuracy: {test_metrics['accuracy_sr_mean']:.2f}/7")
+                print('--- Test Evaluation Complete ---\n')
+
         elif self.best_loss - loss_history[1][-1] < self.min_delta:
             self.counter += 1
             print(f'WARNING: Stop counter {self.counter} of {self.patience}')
@@ -405,6 +418,13 @@ def main():
         debug=debug_mode,
         debug_samples=debug_samples
     )
+
+    # Load test dataloader for evaluation during training (when best model is saved)
+    test_dataloader = __dataset__.load_dataset(
+        args.samples, args.batch, mode=2,  # mode=2 = test set
+        pin_memory=True, num_workers=0
+    )
+
     # OCR model for Brazilian license plates (relative to Proposed/ directory)
     path_ocr = Path('../saved_models/RodoSol-SR')
     
@@ -475,7 +495,8 @@ def main():
         
         scheduler_G.step(val_loss_G)
         
-        early_stopping(generator, args.save, epoch, optimizer_G, [train_loss_g, val_loss_g])
+        early_stopping(generator, args.save, epoch, optimizer_G, [train_loss_g, val_loss_g],
+                       test_dataloader=test_dataloader, device=device, wandb_logger=wandb_logger)
 
         # Skip early stopping in debug mode
         if not debug_mode and early_stopping.early_stop:

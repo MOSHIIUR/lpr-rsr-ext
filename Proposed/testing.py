@@ -18,6 +18,99 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+
+def run_test_evaluation(model, test_dataloader, device, wandb_logger=None, epoch=0):
+    """
+    Run test evaluation on provided model (in-memory, no checkpoint loading).
+
+    Used during training to evaluate on test set when a new best model is saved.
+    Only logs to W&B, does not save CSV files.
+
+    Args:
+        model: Generator network (already on device)
+        test_dataloader: DataLoader for test set
+        device: torch device
+        wandb_logger: Optional WandbLogger instance
+        epoch: Current epoch for logging
+
+    Returns:
+        dict with test metrics (psnr_mean, ssim_mean, accuracy_hr/lr/sr_mean)
+    """
+    # OCR model for license plate recognition
+    path_ocr = Path('../saved_models/RodoSol-SR')
+    criterion = SSIMLoss(path_ocr)
+
+    model.eval()
+
+    lev = [[], [], []]  # HR, LR, SR accuracy
+    psnr_list = []
+    ssim_list = []
+    count = 0
+
+    SSIM_param = {
+        'gaussian_weights': True,
+        'channel_axis': 2,
+        'win_size': 3,
+        'sigma': 1.5,
+        'use_sample_covariance': False,
+        'data_range': 1.0
+    }
+
+    with torch.no_grad():
+        prog_bar = tqdm(enumerate(test_dataloader), total=len(test_dataloader), desc='Test Eval')
+
+        for i, batch in prog_bar:
+            batch['SR'] = model(batch['LR'].to(device))
+
+            for item in range(len(batch['HR'])):
+                imgLR = np.array(criterion.to_numpy(batch['LR'][item].cpu())).astype('uint8')
+                imgHR = np.array(criterion.to_numpy(batch['HR'][item].cpu())).astype('uint8')
+                imgSR = np.array(criterion.to_numpy(batch['SR'][item].cpu())).astype('uint8')
+
+                plate_gt = batch['plate'][item]
+
+                # OCR predictions
+                pred_hr = criterion.OCR_pred(imgHR)[0]
+                pred_lr = criterion.OCR_pred(imgLR)[0]
+                pred_sr = criterion.OCR_pred(imgSR)[0]
+
+                # Accuracy (7 - Levenshtein distance = correct characters)
+                lev[0].append(7 - criterion.levenshtein(plate_gt, pred_hr))
+                lev[1].append(7 - criterion.levenshtein(plate_gt, pred_lr))
+                lev[2].append(7 - criterion.levenshtein(plate_gt, pred_sr))
+
+                # Image quality metrics
+                psnr_list.append(peak_signal_noise_ratio(imgHR, imgSR))
+                ssim_list.append(structural_similarity(imgHR, imgSR, **SSIM_param))
+
+            count += len(batch['HR'])
+
+    # Compute aggregate metrics
+    metrics = {
+        'psnr_mean': np.mean(psnr_list),
+        'ssim_mean': np.mean(ssim_list),
+        'accuracy_hr_mean': np.mean(lev[0]),
+        'accuracy_lr_mean': np.mean(lev[1]),
+        'accuracy_sr_mean': np.mean(lev[2]),
+        'total_images': count,
+    }
+
+    # Log to W&B if enabled
+    if wandb_logger is not None and wandb_logger.enabled:
+        wandb_metrics = {
+            'test/psnr_mean': metrics['psnr_mean'],
+            'test/ssim_mean': metrics['ssim_mean'],
+            'test/accuracy_hr_mean': metrics['accuracy_hr_mean'],
+            'test/accuracy_lr_mean': metrics['accuracy_lr_mean'],
+            'test/accuracy_sr_mean': metrics['accuracy_sr_mean'],
+            'test/total_images': metrics['total_images'],
+        }
+        wandb_logger.log_metrics(wandb_metrics, step=epoch)
+        print("  Test results logged to W&B")
+
+    return metrics
+
+
 def testing(args, wandb_logger=None):
     test_dataloader = __dataset__.load_dataset(args.samples, args.batch, 2, pin_memory=True, num_workers=1)
     count = 0
