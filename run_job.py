@@ -24,6 +24,7 @@ image = (
         "libreadline8",
         "ncurses-term",
         "less",
+        "unzip",  # For extracting dataset
         # OpenCV dependencies
         "libgl1-mesa-glx",
         "libglib2.0-0",
@@ -37,6 +38,8 @@ image = (
         "uv pip install --system opencv-python scikit-image albumentations Pillow",
         "uv pip install --system numpy pandas tqdm matplotlib python-Levenshtein",
         "uv pip install --system wandb",
+        # For downloading dataset from Google Drive
+        "uv pip install --system gdown",
     )
 )
 
