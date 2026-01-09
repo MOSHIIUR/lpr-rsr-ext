@@ -23,8 +23,11 @@ saved_models/
 *.weights
 
 # Dataset files (too large for git)
-dataset/
-*.txt.bak
+# Keep dataset/*.txt files for path references, ignore actual images
+dataset/*.bak
+dataset/HR/
+dataset/LR/
+dataset/splits/
 
 # IDE and editor files
 .vscode/
