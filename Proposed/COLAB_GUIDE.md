@@ -72,6 +72,7 @@ if torch.cuda.is_available():
 !pip install -q tf-keras  # Keras 2 compatibility layer for loading old OCR models
 !pip install -q albumentations==1.3.0
 !pip install -q pandas tqdm scikit-learn
+!pip install -q wandb  # Optional: for experiment tracking
 
 # Verify installations
 import tensorflow as tf
@@ -428,7 +429,34 @@ Test with debug mode first:
 
 ### 2. Monitor Training Progress
 
-**Install tensorboard:**
+**Option A: Use Weights & Biases (Recommended)**
+
+W&B provides real-time dashboards, loss curves, and sample images accessible from any device:
+
+```python
+# Cell: Setup W&B (run once)
+import wandb
+wandb.login()  # Enter your API key when prompted
+```
+
+```python
+# Cell: Train with W&B tracking
+!python training.py \
+    -t ../dataset/dataset.txt \
+    -s /content/drive/MyDrive/lpr_checkpoints \
+    -b 16 \
+    -m 0 \
+    --wandb-project lpr-colab \
+    --wandb-run-name colab-experiment-001
+```
+
+Benefits:
+- View training progress on [wandb.ai](https://wandb.ai) from any device
+- Automatic loss curve visualization
+- Sample image comparisons (LR/HR/SR) every N epochs
+- Training persists in W&B even if Colab disconnects
+
+**Option B: Use Tensorboard:**
 ```python
 %load_ext tensorboard
 %tensorboard --logdir /content/drive/MyDrive/lpr_checkpoints
@@ -668,7 +696,7 @@ if torch.cuda.is_available():
 %cd lpr-rsr-ext/Proposed
 
 # Install dependencies
-!pip install -q tensorflow==2.15.1 tf-keras albumentations opencv-python-headless
+!pip install -q tensorflow==2.15.1 tf-keras albumentations opencv-python-headless wandb
 
 # Mount Drive
 from google.colab import drive
@@ -686,7 +714,13 @@ drive.mount('/content/drive')
 !ls ../saved_models/RodoSol-SR/
 
 # =============================================================================
-# CELL 4: Debug Test
+# CELL 4: Setup W&B (Optional but Recommended)
+# =============================================================================
+import wandb
+wandb.login()  # Enter API key when prompted
+
+# =============================================================================
+# CELL 5: Debug Test
 # =============================================================================
 !python training.py \
     -t ../dataset/dataset.txt \
@@ -696,16 +730,18 @@ drive.mount('/content/drive')
     --debug --debug-samples 20
 
 # =============================================================================
-# CELL 5: Full Training
+# CELL 6: Full Training (with W&B tracking)
 # =============================================================================
 !python training.py \
     -t ../dataset/dataset.txt \
     -s /content/drive/MyDrive/lpr_checkpoints \
     -b 16 \
-    -m 0
+    -m 0 \
+    --wandb-project lpr-colab \
+    --wandb-run-name my-experiment
 
 # =============================================================================
-# CELL 6: Test Model
+# CELL 7: Test Model
 # =============================================================================
 !python testing.py \
     -t ../dataset/dataset.txt \
@@ -714,7 +750,7 @@ drive.mount('/content/drive')
     --model /content/drive/MyDrive/lpr_checkpoints/backup.pt
 
 # =============================================================================
-# CELL 7: Download Results
+# CELL 8: Download Results
 # =============================================================================
 from google.colab import files
 !zip -r results.zip /content/drive/MyDrive/lpr_results
