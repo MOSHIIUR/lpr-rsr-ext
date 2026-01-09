@@ -42,11 +42,16 @@ dataset/
 *.tmp
 *.temp
 
-# Test output images
+# Test output images and results
 TEST_*.jpg
 TEST_*.png
 results/
 output/
+test_results*/
+
+# Weights & Biases
+wandb/
+**/wandb/
 
 # Environment files (may contain sensitive info)
 .env
