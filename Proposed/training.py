@@ -404,26 +404,35 @@ def main():
     debug_mode = getattr(args, 'debug', False)
     debug_samples = getattr(args, 'debug_samples', 20)
 
+    # Fixed to 5 epochs
+    max_epochs = 5
+
     if debug_mode:
         print("\n" + "="*60)
         print("🔍 DEBUG MODE ENABLED")
         print(f"   Training samples: {debug_samples}")
-        print(f"   Max epochs: 3")
+        print(f"   Max epochs: {max_epochs}")
         print(f"   Early stopping: DISABLED")
         print("="*60 + "\n")
+    else:
+        print(f"\n🏃 Standard training mode: {max_epochs} epochs")
 
+    print("📦 Loading training data...")
     train_dataloader, val_dataloader = __dataset__.load_dataset(
         args.samples, args.batch, args.mode,
         pin_memory=True, num_workers=0,
         debug=debug_mode,
         debug_samples=debug_samples
     )
+    print(f"✓ Data loaded: train={len(train_dataloader.dataset)}, val={len(val_dataloader.dataset)}")
 
+    print("📦 Loading test data...")
     # Load test dataloader for evaluation during training (when best model is saved)
     test_dataloader = __dataset__.load_dataset(
         args.samples, args.batch, mode=2,  # mode=2 = test set
         pin_memory=True, num_workers=0
     )
+    print(f"✓ Test data loaded: {len(test_dataloader.dataset)} samples")
 
     # OCR model for Brazilian license plates (relative to Proposed/ directory)
     path_ocr = Path('../saved_models/RodoSol-SR')
@@ -464,7 +473,6 @@ def main():
             'dataset/val_size': len(val_dataloader.dataset),
         }, step=0)
 
-    max_epochs = 3 if debug_mode else 200
     for epoch in range(current_epoch, max_epochs):
         print(f"Epoch {epoch} of {max_epochs}:")
 

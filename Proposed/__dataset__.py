@@ -315,8 +315,12 @@ class customDataset(Dataset):
 @EventlogHandler
 def load_dataset(path, batch_size, mode, pin_memory, num_workers, debug=False, debug_samples=20, skip_hr_image=False):
     if mode == 0 or mode == 1:
+        print("📊 Loading dataset (train/val)...")
+        print(f"   Reading dataset file: {path}")
         train_data = train_test_split(path)[0]
+        print(f"   Loaded {len(train_data)} training samples")
         val_data = train_test_split(path)[2]
+        print(f"   Loaded {len(val_data)} validation samples")
 
         # Debug mode: use only a tiny subset
         if debug:
