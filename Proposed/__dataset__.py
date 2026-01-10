@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 from __syslog__ import EventlogHandler, ExecTime
 from functools import partial
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
 from PIL import Image
@@ -137,18 +138,21 @@ def train_test_split(path):
     train = []
     test = []
     validate = []
-    
+
     with open(path, 'r+', encoding='utf8') as fp:
-        for line in fp.readlines():
+        lines = fp.readlines()
+
+    with tqdm(lines, desc="Parsing dataset") as pbar:
+        for line in pbar:
             line = line.split(';')
-            
+
             imgHR = line[0]
             if 'jpg' in line[0]:
                 ocrTxt = line[0].replace('jpg', 'txt')
             else:
                 ocrTxt = line[0].replace('png', 'txt')
             imgLR = line[1]
-            
+
             with open(ocrTxt, encoding='utf8') as fp:
                 fp.seek(0)
                 tp = fp.readlines()[0].split(':')[1].replace('\n', '').replace(' ', '')
@@ -156,22 +160,22 @@ def train_test_split(path):
                 plate = fp.readlines()[1].split(':')[1].replace('\n', '').replace(' ', '')
                 fp.seek(0)
                 layout = fp.readlines()[2].split(':')[1].replace('\n', '').replace(' ', '')
-            
+
             if 'training' in line[2]:
                 train.append({
                     'HR': imgHR,
                     'LR': imgLR,
                     'plate': plate,
-                    'layout': layout, 
+                    'layout': layout,
                     'type': tp}
                     )
-                    
+
             elif 'test' in line[2]:
                 test.append({
                     'HR': imgHR,
                     'LR': imgLR,
                     'plate': plate,
-                    'layout': layout, 
+                    'layout': layout,
                     'type': tp}
                     )
             else:
@@ -179,10 +183,10 @@ def train_test_split(path):
                     'HR': imgHR,
                     'LR': imgLR,
                     'plate': plate,
-                    'layout': layout, 
+                    'layout': layout,
                     'type': tp}
                     )
-                
+
     return (train, test, validate)
 
 class customDataset(Dataset):
