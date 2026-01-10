@@ -69,18 +69,24 @@ def save_model(model_G, path, epoch, optimizer_G, loss_history, file_name):
 @EventlogHandler
 def load_model(model_G, path):
     load = torch.load(path, map_location=torch.device('cpu'))    
-    model_G.to(device_list[1])   
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model_G.to(device)   
     optimizer_G = torch.optim.Adam(model_G.parameters(), lr=initial_G_lr, betas=(0.1, 0.111))
     epoch = load['epoch']
     model_G.load_state_dict(load['model_state_dict'])    
     train_loss_g, val_loss_g = load['loss']    
     optimizer_G = torch.optim.Adam(model_G.parameters())    
-    optimizer_G.load_state_dict(load['optimizer_state_dict'])    
+    optimizer_G.load_state_dict(load['optimizer_state_dict'])
+    # Move optimizer state to device
+    for state in optimizer_G.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.to(device)
     early_stopping = EarlyStopping(best_loss=val_loss_g[-1])    
     training_summary = """TRAINING SUMMARY:\nBest loss: {}\nLast epoch: {}\nLearning Rate G: {}\nPatience: {}\n""".format(val_loss_g[-1], epoch, optimizer_G.param_groups[0]['lr'], early_stopping.patience)
     print(training_summary)
     
-    return epoch, model_G, optimizer_G, train_loss_g, val_loss_g, early_stopping 
+    return epoch, model_G, optimizer_G, train_loss_g, val_loss_g, early_stopping
 
 
 class EarlyStopping():
@@ -454,9 +460,21 @@ def main():
         val_loss_g = []
 
         early_stopping = EarlyStopping()
-        current_epoch = 0    
+        current_epoch = 0
         
-
+        # Auto-resume: Check if checkpoint exists and resume from it
+        backup_path = Path(args.save) / 'backup.pt'
+        if backup_path.exists():
+            print("="*60)
+            print("🔄 AUTO-RESUME: Checkpoint found!")
+            print(f"   Loading from: {backup_path}")
+            print("="*60)
+            current_epoch, generator, optimizer_G, train_loss_g, val_loss_g, early_stopping = load_model(generator, str(backup_path))
+            # Adjust epoch to continue from next one
+            current_epoch = current_epoch + 1
+            print(f"✓ Resuming from epoch {current_epoch} of {max_epochs}")
+            print("="*60 + "\n")
+        
     elif args.mode == 1:
         current_epoch, generator, optimizer_G, train_loss_g, val_loss_g, early_stopping = load_model(generator, args.model)
     
@@ -512,6 +530,7 @@ def main():
             break
          
         save_model(generator, args.save, epoch, optimizer_G, [train_loss_g, val_loss_g], 'backup.pt')
+        print(f"💾 Checkpoint saved: {Path(args.save) / 'backup.pt'}")
         print('G validation Loss: ', val_loss_G)
         print('G Training Loss: ', train_loss_G)
 
