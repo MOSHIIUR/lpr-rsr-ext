@@ -112,7 +112,8 @@ def run_test_evaluation(model, test_dataloader, device, wandb_logger=None, epoch
 
 
 def testing(args, wandb_logger=None):
-    test_dataloader = __dataset__.load_dataset(args.samples, args.batch, 2, pin_memory=True, num_workers=1)
+    # Load test data without HR images
+    test_dataloader = __dataset__.load_dataset(args.samples, args.batch, 2, pin_memory=True, num_workers=1, skip_hr_image=True)
     count = 0
     # OCR model for Brazilian license plates (relative to Proposed/ directory)
     path_ocr = Path('../saved_models/RodoSol-SR')
@@ -135,84 +136,55 @@ def testing(args, wandb_logger=None):
     model = Network(3, 3).to(device)
     # current_epoch, model, train_loss, val_loss, optimizer, early_stopping = load_model(model, args.model, device_ids)
     _, model, optimizer_G, train_loss_g, val_loss_g, _ = load_model(model, args.model)
-    
+
     char = [[], [], [], []]
-    pred = [[], [], []]
-    lev = [[], [], []]
-    psnr_ssim = [[], []]
-    imgs=0
-    SSIM_param = {
-        'gaussian_weights':True,
-        'channel_axis':2,  # Updated from deprecated 'multichannel'
-        'win_size':3,  # Smaller window size for small images (min is 3)
-        'sigma':1.5,
-        'use_sample_covariance':False,
-        'data_range':1.0
-        }
-    
+    pred = [[], []]  # LR, SR predictions
+    lev = [[], []]   # LR, SR accuracy
+
     with torch.no_grad():
         prog_bar = tqdm(enumerate(test_dataloader), total=len(test_dataloader))
-        
+
         for i, batch in prog_bar:
             batch['SR'] = model(batch['LR'].to(device))
-         
-            for item in range(len(batch['HR'])):
+
+            for item in range(len(batch['LR'])):
                 imgLR = np.array(criterion.to_numpy(batch['LR'][item].cpu())).astype('uint8')
-                imgHR = np.array(criterion.to_numpy(batch['HR'][item].cpu())).astype('uint8')
                 imgSR = np.array(criterion.to_numpy(batch['SR'][item].cpu())).astype('uint8')
-                
+
                 char[0].append(batch['plate'][item])
                 char[1].append(batch['type'][item])
                 char[2].append(batch['layout'][item])
                 char[3].append(batch['file'][item])
-               
-                Image.fromarray(np.array(imgHR).astype('uint8')).save(Path(args.save) / Path('HR_'+char[3][-1]))
-                Image.fromarray(np.array(imgLR).astype('uint8')).save(Path(args.save) / Path('LR_'+char[3][-1]))
-                Image.fromarray(np.array(imgSR).astype('uint8')).save(Path(args.save) / Path('SR_'+char[3][-1]))
 
-                pred[0].append(criterion.OCR_pred(imgHR)[0])
-                pred[1].append(criterion.OCR_pred(imgLR)[0])
-                pred[2].append(criterion.OCR_pred(imgSR)[0])
-                
-                lev[0].append(7- criterion.levenshtein(char[0][-1], pred[0][-1]))
-                lev[1].append(7- criterion.levenshtein(char[0][-1], pred[1][-1]))
-                lev[2].append(7- criterion.levenshtein(char[0][-1], pred[2][-1]))
-                
-                psnr_ssim[0].append(peak_signal_noise_ratio(imgHR, imgSR))
-                psnr_ssim[1].append(structural_similarity(imgHR, imgSR, **SSIM_param))
-        
-            count += len(batch['HR']) 
-        
+                Image.fromarray(imgLR).save(Path(args.save) / ('LR_' + char[3][-1]))
+                Image.fromarray(imgSR).save(Path(args.save) / ('SR_' + char[3][-1]))
+
+                pred[0].append(criterion.OCR_pred(imgLR)[0])
+                pred[1].append(criterion.OCR_pred(imgSR)[0])
+
+                lev[0].append(7 - criterion.levenshtein(char[0][-1], pred[0][-1]))
+                lev[1].append(7 - criterion.levenshtein(char[0][-1], pred[1][-1]))
+
+            count += len(batch['LR'])
+
         df = pd.DataFrame({
             'Type': char[1],
             'Layout': char[2],
             'GT Plate': char[0],
             'file': char[3],
-            
-            'HR Prediction': pred[0],
-            'Accuracy (HR)': lev[0],
-            
-            'LR Prediction': pred[1],
-            'Accuracy (LR)': lev[1],
-            
-            'OCR SR Prediction': pred[2],
-            'Accuracy (SR)': lev[2],
-            
-            'PSNR HR/SR': psnr_ssim[0],
-            'SSIM HR/SR': psnr_ssim[1]
+
+            'LR Prediction': pred[0],
+            'Accuracy (LR)': lev[0],
+
+            'OCR SR Prediction': pred[1],
+            'Accuracy (SR)': lev[1],
             })
-        
-        HR = (df['Accuracy (HR)'].value_counts(normalize=True)*100).sort_index()
+
         LR = (df['Accuracy (LR)'].value_counts(normalize=True)*100).sort_index()
         SR = (df['Accuracy (SR)'].value_counts(normalize=True)*100).sort_index()
 
-        print(HR, '\n')
         print(LR, '\n')
         print(SR, '\n')
-        # df_motor = df[df['Type'] == 'motorcycle']
-        df_car = df[df['Type'] == 'car']
-        with open(os.path.join(args.save, 'resultsHR.csv'), 'w+', encoding='utf8') as fp:
-            HR.to_csv(fp, line_terminator='\n')
 
         with open(os.path.join(args.save, 'resultsSR.csv'), 'w+', encoding='utf8') as fp:
             SR.to_csv(fp, line_terminator='\n')
@@ -232,9 +204,6 @@ def testing(args, wandb_logger=None):
             # Aggregate metrics (exclude 'Average' row for mean calculation)
             df_no_avg = df.iloc[:-1]  # Exclude last row which is 'Average'
             avg_metrics = {
-                'test/psnr_mean': df_no_avg['PSNR HR/SR'].mean(),
-                'test/ssim_mean': df_no_avg['SSIM HR/SR'].mean(),
-                'test/accuracy_hr_mean': df_no_avg['Accuracy (HR)'].mean(),
                 'test/accuracy_lr_mean': df_no_avg['Accuracy (LR)'].mean(),
                 'test/accuracy_sr_mean': df_no_avg['Accuracy (SR)'].mean(),
                 'test/total_images': count,
@@ -244,8 +213,6 @@ def testing(args, wandb_logger=None):
             # Accuracy distributions
             acc_dist_metrics = {}
             for i in range(8):
-                if i in HR.index:
-                    acc_dist_metrics[f'test/accuracy_hr_dist_{i}'] = HR[i]
                 if i in LR.index:
                     acc_dist_metrics[f'test/accuracy_lr_dist_{i}'] = LR[i]
                 if i in SR.index:
@@ -257,20 +224,18 @@ def testing(args, wandb_logger=None):
             for idx in range(min(100, len(df_no_avg))):
                 row = df_no_avg.iloc[idx]
                 table_data.append([
-                    row['file'], row['GT Plate'], row['HR Prediction'],
-                    row['Accuracy (HR)'], row['LR Prediction'], row['Accuracy (LR)'],
+                    row['file'], row['GT Plate'],
+                    row['LR Prediction'], row['Accuracy (LR)'],
                     row['OCR SR Prediction'], row['Accuracy (SR)'],
-                    row['PSNR HR/SR'], row['SSIM HR/SR']
                 ])
 
             wandb_logger.log_table('test/detailed_results', table_data,
-                columns=['File', 'GT Plate', 'HR Pred', 'HR Acc',
-                        'LR Pred', 'LR Acc', 'SR Pred', 'SR Acc', 'PSNR', 'SSIM'])
+                columns=['File', 'GT Plate', 'LR Pred', 'LR Acc', 'SR Pred', 'SR Acc'])
 
             print("✅ Test results logged to W&B")
 
 
-def histogram(save_path, df, name, columns_to_drop=['PSNR HR/SR', 'SSIM HR/SR']):
+def histogram(save_path, df, name, columns_to_drop=[]):
     hist_df = df.select_dtypes(exclude=['object'])
     hist_df = hist_df.drop(columns_to_drop, axis=1)
     hist_df = hist_df.round(1)

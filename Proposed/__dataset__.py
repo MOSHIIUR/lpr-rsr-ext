@@ -186,10 +186,11 @@ def train_test_split(path):
     return (train, test, validate)
 
 class customDataset(Dataset):
-    def __init__(self, x_tensor, augmentation = True):
+    def __init__(self, x_tensor, augmentation=True, skip_hr_image=False):
         self.x = x_tensor
         self.to_tensor = transforms.ToTensor()
         self.augmentation = True
+        self.skip_hr_image = skip_hr_image
         
         self.background_color = (127, 127, 127)
         self.aspect_ratio = 2.0
@@ -270,38 +271,37 @@ class customDataset(Dataset):
         txt_path = Path(self.x[index]['HR'])
         file_name = txt_path.as_posix().split('/')[-1]
         txt_path = txt_path.with_suffix('.txt')
-        
-        imgHR = self.open_image(self.x[index]['HR'])
-        
-        imgLR = self.open_image(self.x[index]['LR'])
-        imgLR = np.array(imgLR)
-        
-        augLR = None
-        augHR = None
-        
-        if self.augmentation:
-            augLR = np.random.choice(self.transformLR, replace = True)
-            augHR = np.random.choice(self.transformHR, replace = True)
-        
-        if self.augmentation and (augHR is not None):
-            imgHR = augHR(image=imgHR)["image"]
-        
-        if self.augmentation and (augLR is not None):
-            imgLR = augLR(image=imgLR)["image"]
-        
-        plate, layout, tp = self.x[index]['plate'], self.x[index]['layout'], self.x[index]['type']
-          
-        imgLR, _, _ = functions.padding(imgLR, self.min_ratio, self.max_ratio, color = self.background_color)
-        imgHR, _, _ = functions.padding(imgHR, self.min_ratio, self.max_ratio, color = self.background_color)
-        
-        # imgLR = cv2.cvtColor(imgLR, cv2.COLOR_BGR2GRAY)
-        # imgHR = cv2.cvtColor(imgHR, cv2.COLOR_BGR2GRAY)
-        
-        imgLR = cv2.resize(imgLR, IMG_LR, interpolation=cv2.INTER_CUBIC)
-        imgHR = cv2.resize(imgHR, IMG_HR, interpolation=cv2.INTER_CUBIC)
 
-        imgHR = self.to_tensor(imgHR)
+        # Load LR image (always required)
+        imgLR = np.array(self.open_image(self.x[index]['LR']))
+
+        # Conditionally load and process HR image
+        imgHR = None
+        if not self.skip_hr_image:
+            imgHR = self.open_image(self.x[index]['HR'])
+
+        # Apply augmentation
+        if self.augmentation:
+            augLR = np.random.choice(self.transformLR, replace=True)
+            if augLR is not None:
+                imgLR = augLR(image=imgLR)["image"]
+
+            if imgHR is not None:
+                augHR = np.random.choice(self.transformHR, replace=True)
+                if augHR is not None:
+                    imgHR = augHR(image=imgHR)["image"]
+
+        plate, layout, tp = self.x[index]['plate'], self.x[index]['layout'], self.x[index]['type']
+
+        # Apply padding and resize
+        imgLR, _, _ = functions.padding(imgLR, self.min_ratio, self.max_ratio, color=self.background_color)
+        imgLR = cv2.resize(imgLR, IMG_LR, interpolation=cv2.INTER_CUBIC)
         imgLR = self.to_tensor(imgLR)
+
+        if imgHR is not None:
+            imgHR, _, _ = functions.padding(imgHR, self.min_ratio, self.max_ratio, color=self.background_color)
+            imgHR = cv2.resize(imgHR, IMG_HR, interpolation=cv2.INTER_CUBIC)
+            imgHR = self.to_tensor(imgHR)
 
         return {
                 'HR': imgHR,
@@ -313,7 +313,7 @@ class customDataset(Dataset):
                 }
 
 @EventlogHandler
-def load_dataset(path, batch_size, mode, pin_memory, num_workers, debug=False, debug_samples=20):
+def load_dataset(path, batch_size, mode, pin_memory, num_workers, debug=False, debug_samples=20, skip_hr_image=False):
     if mode == 0 or mode == 1:
         train_data = train_test_split(path)[0]
         val_data = train_test_split(path)[2]
@@ -329,7 +329,7 @@ def load_dataset(path, batch_size, mode, pin_memory, num_workers, debug=False, d
         return train_dataloader, val_dataloader
 
     elif mode == 2:
-        test_dataloader = DataLoader(customDataset(train_test_split(path)[1], augmentation=False), batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+        test_dataloader = DataLoader(customDataset(train_test_split(path)[1], augmentation=False, skip_hr_image=skip_hr_image), batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
         return test_dataloader
 
 @EventlogHandler    
