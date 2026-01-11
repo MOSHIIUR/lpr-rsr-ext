@@ -1,11 +1,21 @@
+# ============================================================================
+# CRITICAL: Configure TensorFlow BEFORE importing it
+# Force TensorFlow to use CPU only, freeing GPU memory for PyTorch
+# ============================================================================
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TF logging
+
 import torch
 import warnings
 import numpy as np
 import __dataset__
 import pandas as pd
 import matplotlib.pyplot as plt
-# import tensorflow as tf
+
+# Configure TensorFlow to use CPU only
+import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')
+
 from PIL import Image
 from tqdm import tqdm
 from pathlib import Path
@@ -15,8 +25,6 @@ import training
 from training import load_model, SSIMLoss
 from wandb_logger import get_wandb_logger
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 def run_test_evaluation(model, test_dataloader, device, wandb_logger=None, epoch=0):

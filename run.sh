@@ -98,11 +98,11 @@ export PYTHONUNBUFFERED=1
 # Run training with W&B enabled
 # Mode 0: Train from scratch
 # Mode 1: Resume from checkpoint
-# Reduced batch size from 16 to 8 to fit in T4 GPU memory (14.56 GiB)
+# OPTIMIZED: Batch size 16 (was 8) - TF now on CPU frees GPU memory for PyTorch
 python training.py \
     -t "$UPDATED_DATASET_TXT" \
     -s ./checkpoints \
-    -b 8 \
+    -b 16 \
     -m 0 \
     --wandb-project lpr-super-resolution
 

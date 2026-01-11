@@ -1,3 +1,11 @@
+# ============================================================================
+# CRITICAL: Configure TensorFlow BEFORE importing it
+# Force TensorFlow to use CPU only, freeing GPU memory for PyTorch
+# ============================================================================
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TF logging
+os.environ['CUDA_VISIBLE_DEVICES_TF'] = '-1'  # Hint for TF (not always respected)
+
 import re
 import sys
 import cv2
@@ -8,10 +16,15 @@ import __dataset__
 import torchvision.transforms as transforms
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.autograd import Variable
+from torch.cuda.amp import autocast, GradScaler  # Mixed precision training
 import warnings
-import os
+
+# Configure TensorFlow to use CPU only BEFORE any TF operations
 import tensorflow as tf
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# Disable all GPUs for TensorFlow - let PyTorch have full GPU access
+tf.config.set_visible_devices([], 'GPU')
+print("TensorFlow configured to use CPU only (GPU reserved for PyTorch)")
+
 # Use Keras 2 compatibility layer for older saved models
 try:
     import tf_keras
@@ -253,8 +266,9 @@ class OCRFeatureExtractor(nn.Module):
                 if self.OCR is not None:
                     features = self.OCR_pred(img)
                 batch.append(features)
-        logits = Variable(torch.as_tensor(batch), requires_grad=True)
-        # logits = logits.view(logits.size(0), -1)
+        # OPTIMIZATION: Don't track gradients for OCR features (they're from frozen TF model)
+        # This prevents memory leaks from accumulating gradient graphs
+        logits = torch.as_tensor(np.array(batch), dtype=torch.float32).detach()
         
         return logits
     
@@ -330,13 +344,16 @@ def validate_gan (generator, val_dataloader, feature_extractor, L1_loss, MSE_los
                 'features_loss': val_running_features / steps
             }
 
-def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss, MSE_loss, device, wandb_logger=None, epoch=0):
+def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss, MSE_loss, device, wandb_logger=None, epoch=0, scaler=None):
     print('TRAINING')
     generator.train()
     train_running_loss_G = 0.0
     train_running_mse = 0.0
     train_running_features = 0.0
     steps = 0
+    
+    # Use mixed precision if scaler is provided
+    use_amp = scaler is not None and device.type == 'cuda'
 
     with tqdm(enumerate(train_dataloader), total=len(train_dataloader)) as prog_bar:
         for i, batch in enumerate(prog_bar):
@@ -347,27 +364,52 @@ def fit_gan(generator, train_dataloader, optimizer_G, feature_extractor, L1_loss
             #  ---------------------
             #   TRAIN GENERATOR 
             #  ---------------------
-            optimizer_G.zero_grad()
+            optimizer_G.zero_grad(set_to_none=True)  # More memory efficient
             
-            # generate SR image
-            fake_output = generator(imgs_LR)
-            
-            # loss
-            gen_features = feature_extractor(fake_output)
-            real_features = feature_extractor(imgs_HR)
-            features = L1_loss(gen_features, real_features)
-            mse_loss = MSE_loss(fake_output, imgs_HR)
-            loss = mse_loss + features
-            
-            loss.backward()
-            optimizer_G.step()
+            # Mixed precision forward pass
+            if use_amp:
+                with autocast():
+                    # generate SR image
+                    fake_output = generator(imgs_LR)
+                    
+                    # loss (MSE only in autocast, feature extraction needs FP32)
+                    mse_loss = MSE_loss(fake_output, imgs_HR)
+                
+                # Feature extraction outside autocast (TensorFlow OCR needs FP32)
+                gen_features = feature_extractor(fake_output.float())
+                real_features = feature_extractor(imgs_HR.float())
+                features = L1_loss(gen_features, real_features)
+                loss = mse_loss + features
+                
+                # Scaled backward pass
+                scaler.scale(loss).backward()
+                scaler.step(optimizer_G)
+                scaler.update()
+            else:
+                # Standard FP32 training
+                fake_output = generator(imgs_LR)
+                gen_features = feature_extractor(fake_output)
+                real_features = feature_extractor(imgs_HR)
+                features = L1_loss(gen_features, real_features)
+                mse_loss = MSE_loss(fake_output, imgs_HR)
+                loss = mse_loss + features
+                
+                loss.backward()
+                optimizer_G.step()
             
             train_running_loss_G+=loss.detach().item()
             train_running_mse += mse_loss.detach().item()
             train_running_features += features.detach().item()
-            Image.fromarray(np.array(feature_extractor.to_numpy(fake_output[0].to('cpu'))).astype('uint8')).save('TEST_08.jpg')
+            
+            # Save sample image less frequently to reduce I/O overhead
+            if steps % 50 == 0:
+                Image.fromarray(np.array(feature_extractor.to_numpy(fake_output[0].to('cpu'))).astype('uint8')).save('TEST_08.jpg')
 
             steps+=1
+            
+            # Explicit memory cleanup every N batches
+            if steps % 100 == 0:
+                torch.cuda.empty_cache()
 
             # Log batch metrics to wandb
             if wandb_logger and wandb_logger.enabled:
@@ -426,7 +468,7 @@ def main():
     print("📦 Loading training data...")
     train_dataloader, val_dataloader = __dataset__.load_dataset(
         args.samples, args.batch, args.mode,
-        pin_memory=True, num_workers=0,
+        pin_memory=True, num_workers=4,  # OPTIMIZATION: Parallel data loading
         debug=debug_mode,
         debug_samples=debug_samples
     )
@@ -436,7 +478,7 @@ def main():
     # Load test dataloader for evaluation during training (when best model is saved)
     test_dataloader = __dataset__.load_dataset(
         args.samples, args.batch, mode=2,  # mode=2 = test set
-        pin_memory=True, num_workers=0
+        pin_memory=True, num_workers=2
     )
     print(f"✓ Test data loaded: {len(test_dataloader.dataset)} samples")
 
@@ -491,6 +533,11 @@ def main():
             'dataset/val_size': len(val_dataloader.dataset),
         }, step=0)
 
+    # OPTIMIZATION: Mixed precision training with GradScaler
+    scaler = GradScaler() if device.type == 'cuda' else None
+    if scaler:
+        print("⚡ Mixed precision training (AMP) enabled")
+
     for epoch in range(current_epoch, max_epochs):
         print(f"Epoch {epoch} of {max_epochs}:")
 
@@ -502,7 +549,8 @@ def main():
                                MSE_loss,
                                device,
                                wandb_logger=wandb_logger,
-                               epoch=epoch)
+                               epoch=epoch,
+                               scaler=scaler)
 
         train_loss_G = train_metrics['total_loss']
         train_loss_g.append(train_loss_G)
