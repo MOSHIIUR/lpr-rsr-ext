@@ -5,6 +5,7 @@ import shutil
 import argparse
 import functions
 import numpy as np
+import torch
 import albumentations as A
 import torchvision.transforms as transforms
 from __syslog__ import EventlogHandler, ExecTime
@@ -306,6 +307,9 @@ class customDataset(Dataset):
             imgHR, _, _ = functions.padding(imgHR, self.min_ratio, self.max_ratio, color=self.background_color)
             imgHR = cv2.resize(imgHR, IMG_HR, interpolation=cv2.INTER_CUBIC)
             imgHR = self.to_tensor(imgHR)
+        else:
+            # Return empty tensor placeholder when HR is skipped (for DataLoader compatibility)
+            imgHR = torch.empty(0)
 
         return {
                 'HR': imgHR,
